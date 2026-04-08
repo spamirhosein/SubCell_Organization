@@ -16,13 +16,10 @@ import sys
 import tifffile
 import numpy as np
 
-# ============================================================================
 # VALIDATION: Ensure parent folder is provided via command-line argument
-# ============================================================================
 
 if len(sys.argv) < 2:
     print("Usage: python 'Stacking channels.py' <parent_folder_path>")
-    print("Example: python 'Stacking channels.py' /omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/SubCOrg_Opt/New_Data/PM/positivity_map")
     sys.exit(1)
 
 parent_folder = sys.argv[1]
@@ -31,21 +28,18 @@ if not os.path.isdir(parent_folder):
     print(f"Error: Folder does not exist: {parent_folder}")
     sys.exit(1)
 
-# ============================================================================
 # CONFIGURATION: Define channels to merge
-# ============================================================================
 
 # Channel file names in the order they should be stacked
-# Channel 1: Nucleus marker (NaK_ATPase_HLA-I)
-# Channel 2: Membrane/Cytoplasm marker (HH3)
+# Channel 1: Nucleus marker (HH3)
+# Channel 2: Membrane/Cytoplasm marker (NaK_ATPase_HLA-I)
 channel_files = [
-    "NaK_ATPase_HLA-I.tiff",
-    "HH3.tiff"
+    "HH3.tiff",
+    "NaK_ATPase_HLA-I.tiff"
 ]
 
-# ============================================================================
 # PROCESSING: Iterate through all subfolders and create stacked images
-# ============================================================================
+
 
 # Discover all subfolders in the parent directory
 fov_folders = [os.path.join(parent_folder, subdir) 

@@ -1,0 +1,10 @@
+.github/
+
+# Ignore all files under __pycache__ directories
+**/__pycache__/
+
+checkpoints/
+manifests/
+runs/
+
+.vscode/

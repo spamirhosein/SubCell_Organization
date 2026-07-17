@@ -162,10 +162,19 @@ def process_fov(cell_path: Path, nuc_path: Path, out_dir: Path, framesize: int, 
     cell_mask = _load_mask(cell_path)
     nuc_mask = _load_mask(nuc_path)
     saved = 0
+    # print the number of unique cells for debugging
+    unique_cells = len(list(_iter_cells(cell_mask)))
+    print(f"Processing {cell_path.stem} with {unique_cells} unique cells")
+
+    # When unique_cells is 0, print the sum of cell_mask for debugging
+    if unique_cells == 0:
+        print(f"Sum of cell mask for {cell_path.stem}: {np.sum(cell_mask)}")
+
     for cid in _iter_cells(cell_mask):
         try:
             label = _crop_and_label(cell_mask, nuc_mask, framesize, cid)
         except ValueError:
+            print(f"Skipping cell {cid} in {cell_path.stem} due to cropping error.")
             continue
         label = _align_label(label)
         if downsample > 1:

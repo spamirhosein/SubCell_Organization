@@ -1,80 +1,62 @@
-"""
-Stack multi-channel TIFF images for Cellpose processing.
-
-This script processes all FOV (Field of View) subfolders within a parent directory,
-merging specified channel files into a single multi-channel TIFF file suitable for Cellpose.
-
-Usage:
-    python "Stacking channels.py" <parent_folder_path>
-
-Example:
-    python "Stacking channels.py" /path/to/data/positivity_map
-"""
-
 import os
-import sys
+import glob
 import tifffile
 import numpy as np
 
-# VALIDATION: Ensure parent folder is provided via command-line argument
+# 1. Specify the parent folder path
+parent_folder = r"D:\image_data\Hi-res_Data\Intensity"
 
-if len(sys.argv) < 2:
-    print("Usage: python 'Stacking channels.py' <parent_folder_path>")
-    sys.exit(1)
-
-parent_folder = sys.argv[1]
-
-if not os.path.isdir(parent_folder):
-    print(f"Error: Folder does not exist: {parent_folder}")
-    sys.exit(1)
-
-# CONFIGURATION: Define channels to merge
-
-# Channel file names in the order they should be stacked
-# Channel 1: Nucleus marker (HH3)
-# Channel 2: Membrane/Cytoplasm marker (NaK_ATPase_HLA-I)
-channel_files = [
-    "HH3.tiff",
-    "NaK_ATPase_HLA-I.tiff"
+# Find all subdirectories (each represents a different FOV)
+fov_folders = [
+    os.path.join(parent_folder, d) 
+    for d in os.listdir(parent_folder) 
+    if os.path.isdir(os.path.join(parent_folder, d))
 ]
 
-# PROCESSING: Iterate through all subfolders and create stacked images
+# 2. Specify the channel files to merge, IN THE EXACT ORDER you want them stacked.
+# Note: Cellpose typically uses Channel 1 for Cytoplasm/Membrane and Channel 2 for Nucleus.
+channel_files = [
+    "HH3.tiff", # Channel 1
+    "Membrane.tiff"   # Channel 2
+]
 
-
-# Discover all subfolders in the parent directory
-fov_folders = [os.path.join(parent_folder, subdir) 
-               for subdir in os.listdir(parent_folder)
-               if os.path.isdir(os.path.join(parent_folder, subdir))]
+# 3. Specify the output folder
+output_folder = r"D:\image_data\Hi-res_Data\Intensity\Stacked_Mem_Nuc"
+os.makedirs(output_folder, exist_ok=True)
 
 for fov_path in fov_folders:
     print(f"Processing FOV: {fov_path}")
     
     images = []
-    
-    # Load each channel image in the specified order
+    # Read each channel one by one to ensure the correct order
     for chan_file in channel_files:
-        file_path = os.path.join(fov_path, chan_file)
+        # Search recursively in all subfolders
+        pattern = os.path.join(fov_path, "**", chan_file)
+        found_files = glob.glob(pattern, recursive=True)
         
-        if os.path.exists(file_path):
+        if found_files:
+            file_path = found_files[0]  # Use the first match found
             img = tifffile.imread(file_path)
             images.append(img)
         else:
-            print(f"  Warning: '{chan_file}' not found in {fov_path}. Skipping this FOV.")
+            print(f"  Warning: '{chan_file}' not found in {fov_path} or its subfolders. Skipping this FOV.")
             break
-    
-    # Save the stacked image only if all channels were successfully loaded
+            
+    # Only save if all specified channels were successfully loaded
     if len(images) == len(channel_files):
-        # Stack channels along axis 0: resulting shape is (Channels, Height, Width)
+        # Stack the images along a new first axis -> Shape becomes (Channels, Y, X)
         stacked_img = np.stack(images, axis=0)
         
-        output_filename = os.path.join(fov_path, "merged_for_cellpose.tiff")
+        # Define the output file name and path using the FOV folder name
+        fov_folder_name = os.path.basename(fov_path)
+        output_filename = os.path.join(output_folder, f"{fov_folder_name}.tiff")
         
-        # Write as ImageJ-compatible multi-channel TIFF
-        # imagej=True and metadata ensure Cellpose reads dimensions correctly
+        # Save as a multi-channel tiff. 
+        # imagej=True and axes='CYX' ensures Cellpose and ImageJ read the dimensions correctly.
         tifffile.imwrite(
             output_filename, 
             stacked_img, 
             imagej=True, 
             metadata={'axes': 'CYX'}
         )
-        print(f"  Successfully saved: {output_filename}\n")
+        print(f"  Successfully saved stacked image: {output_filename}\n")

@@ -7,8 +7,8 @@ NUC_STEM = "NaK_ATPase_HLA-I"
 MEM_STEM = "HH3"
 
 # Input and Output directories
-PARENT_DIR = r"/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/SubCOrg_Opt/New_Data/PM/positivity_map"
-OUTPUT_DIR = r"/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/SubCOrg_Opt/New_Data/PM/Mem_Nuc_Clahe"
+PARENT_DIR = r"C:\Users\Amirhossein\Desktop"
+OUTPUT_DIR = r"C:\Users\Amirhossein\Desktop"
 
 def find_marker_file(folder, stem):
     for ext in (".tif", ".tiff"):

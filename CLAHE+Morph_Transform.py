@@ -3,10 +3,9 @@ import numpy as np
 import cv2
 import tifffile as tiff
 
-# Input and Output directories
-MEM_DIR = r"/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/SubCOrg_Opt/New_Data/Intensity_Membrane_96"
-NUC_DIR = r"/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/SubCOrg_Opt/New_Data/Intensity_Nucleus_96"
-OUTPUT_DIR = r"/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/SubCOrg_Opt/New_Data/Mem_Nuc_Clahe_96"
+# Input directories - will recursively search for subfolders
+# Output will be saved in the same subfolder as the input files
+BASE_DIR = r"D:\image_data\Ha Anh\Mem_Nuc"
 
 # Per-channel morphological operations - choose which operations apply to each channel
 # Available operations: 'opening', 'closing', 'gradient', 'tophat'
@@ -39,26 +38,71 @@ GAMMA_VALUE = 1.5                 # Gamma value > 1 darkens mid-tones while pres
 APPLY_MEDIAN_FILTER = True       # Set to True to apply median filter, False to skip it
 MEDIAN_FILTER_SIZE = 3           # Pixel kernel size (3 = 3×3 kernel). Must be odd number
 
+# Channel identification patterns - used to match filenames to identify nucleus vs membrane
+# Supports partial matches (case-insensitive)
+NUCLEUS_PATTERN = 'nucleus'              # Pattern to identify nucleus channel files (e.g., 'HH3', 'DAPI', 'nuc')
+MEMBRANE_PATTERN = 'membrane'  # Pattern to identify membrane channel files (e.g., 'membrane', 'NaK', 'FITC')
+
 # File filtering - process specific files or all files
 PROCESS_SPECIFIC_FILES = False   # Set to True to process only specific files, False to process all
 SPECIFIC_FILES_TO_PROCESS = [    # Add file base names here (without extension)
     "B_5l_C01_R01"
 ]
 
-def get_image_files(directory):
-    """Collect all image files (.tif, .tiff) from directory.
-    Returns dict: {base_name: full_path}
-    """
-    files_dict = {}
-    if not os.path.isdir(directory):
-        return files_dict
+def extract_common_base_name(filename, channel_pattern):
+    """Extract common base name by removing channel identifier (case-insensitive).
     
-    for filename in os.listdir(directory):
-        if filename.lower().endswith((".tif", ".tiff")):
-            base_name = os.path.splitext(filename)[0]
-            full_path = os.path.join(directory, filename)
-            files_dict[base_name] = full_path
-    return files_dict
+    E.g., 'sample_HH3.tif' with pattern 'HH3' -> 'sample'
+          'sample_NaK_ATPase_HLA-I.tif' with pattern 'NaK_ATPase_HLA-I' -> 'sample'
+    """
+    base_name = os.path.splitext(filename)[0]
+    # Case-insensitive removal of the channel pattern and surrounding separators
+    # Try with underscore, then with direct replacement
+    pattern_lower = channel_pattern.lower()
+    base_lower = base_name.lower()
+    
+    if f"_{pattern_lower}" in base_lower:
+        idx = base_lower.rfind(f"_{pattern_lower}")
+        common_name = base_name[:idx]
+    elif pattern_lower in base_lower:
+        idx = base_lower.rfind(pattern_lower)
+        common_name = base_name[:idx] + base_name[idx + len(channel_pattern):]
+        common_name = common_name.rstrip("_")
+    else:
+        common_name = base_name
+    
+    return common_name
+
+def find_image_files_recursive(base_directory, filename_pattern):
+    """Recursively search for image files matching a pattern in all subfolders.
+    
+    Args:
+        base_directory: Root directory to search
+        filename_pattern: Pattern to match in filename (e.g., 'HH3', 'membrane')
+    
+    Returns:
+        dict: {subfolder_path: {common_base_name: full_path}}
+              Groups files by their subfolder, keyed by common base name (channel removed)
+    """
+    files_by_subfolder = {}
+    
+    if not os.path.isdir(base_directory):
+        return files_by_subfolder
+    
+    # Walk through all subdirectories
+    for root, dirs, files in os.walk(base_directory):
+        matching_files = {}
+        for filename in files:
+            if filename.lower().endswith((".tif", ".tiff")):
+                if filename_pattern.lower() in filename.lower():
+                    common_base_name = extract_common_base_name(filename, filename_pattern)
+                    full_path = os.path.join(root, filename)
+                    matching_files[common_base_name] = full_path
+        
+        if matching_files:
+            files_by_subfolder[root] = matching_files
+    
+    return files_by_subfolder
 
 def morph_opening(img, kernel_size=(3, 3)):
     """Remove small speckles (salt noise) without blurring edges.
@@ -162,37 +206,31 @@ def clahe_uint16(img, tilesize=CLAHE_TILE_SIZE, cliplimit=CLAHE_CLIP_LIMIT, norm
     return clahe.apply(u16)
 
 # Create the output directory if it doesn't already exist
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(BASE_DIR, exist_ok=True)
 
-# Get all membrane and nucleus channel files
-mem_files = get_image_files(MEM_DIR)
-nuc_files = get_image_files(NUC_DIR)
+# Recursively search for nucleus and membrane files in all subfolders using configured patterns
+print(f"Searching for nucleus pattern: '{NUCLEUS_PATTERN}'")
+print(f"Searching for membrane pattern: '{MEMBRANE_PATTERN}'")
+print()
 
-if not mem_files:
-    raise RuntimeError(f"No image files found in {MEM_DIR}")
+nuc_files = find_image_files_recursive(BASE_DIR, NUCLEUS_PATTERN)
+mem_files = find_image_files_recursive(BASE_DIR, MEMBRANE_PATTERN)
+
 if not nuc_files:
-    raise RuntimeError(f"No image files found in {NUC_DIR}")
+    raise RuntimeError(f"No nucleus image files found matching pattern '{NUCLEUS_PATTERN}' in {BASE_DIR} or subfolders")
+if not mem_files:
+    raise RuntimeError(f"No membrane image files found matching pattern '{MEMBRANE_PATTERN}' in {BASE_DIR} or subfolders")
 
-# Find matching base names
-matched_pairs = sorted(set(mem_files.keys()) & set(nuc_files.keys()))
+# Process each subfolder that has both nucleus and membrane files
+all_subfolders_with_pairs = set(nuc_files.keys()) & set(mem_files.keys())
 
-if not matched_pairs:
-    raise RuntimeError(f"No matching files found between {MEM_DIR} and {NUC_DIR}")
+if not all_subfolders_with_pairs:
+    raise RuntimeError(f"No subfolders found with both nucleus and membrane files in {BASE_DIR}")
 
-# Filter to specific files if enabled
-if PROCESS_SPECIFIC_FILES:
-    if not SPECIFIC_FILES_TO_PROCESS:
-        raise RuntimeError("PROCESS_SPECIFIC_FILES is True but SPECIFIC_FILES_TO_PROCESS is empty")
-    matched_pairs = [f for f in matched_pairs if f in SPECIFIC_FILES_TO_PROCESS]
-    if not matched_pairs:
-        raise RuntimeError(f"No matching files found for specified files: {SPECIFIC_FILES_TO_PROCESS}")
-    print(f"Processing {len(matched_pairs)} SPECIFIC files:")
-    for f in matched_pairs:
-        print(f"  - {f}")
-else:
-    print(f"Processing ALL {len(matched_pairs)} available files:")
-    for f in matched_pairs:
-        print(f"  - {f}")
+print(f"Found {len(all_subfolders_with_pairs)} subfolder(s) with matching HH3 and membrane files:")
+for subfolder in sorted(all_subfolders_with_pairs):
+    print(f"  - {subfolder}")
+print()
 
 print(f"\nConfiguration:")
 print(f"  Nucleus operations: {NUCLEUS_MORPH_OPERATIONS}")
@@ -211,61 +249,74 @@ print()
 
 done, skipped = 0, 0
 
-for base_name in matched_pairs:
-    mem_path = mem_files[base_name]
-    nuc_path = nuc_files[base_name]
+for subfolder in sorted(all_subfolders_with_pairs):
+    # Get files in this subfolder
+    subfolder_nuc = nuc_files[subfolder]
+    subfolder_mem = mem_files[subfolder]
     
-    try:
-        # Read raw images
-        nuc_raw = tiff.imread(nuc_path)
-        mem_raw = tiff.imread(mem_path)
+    # If each subfolder has exactly one nucleus and one membrane file, pair them directly
+    if len(subfolder_nuc) == 1 and len(subfolder_mem) == 1:
+        nuc_key = list(subfolder_nuc.keys())[0]
+        mem_key = list(subfolder_mem.keys())[0]
+        nuc_path = subfolder_nuc[nuc_key]
+        mem_path = subfolder_mem[mem_key]
         
-        # Apply morphological operations on raw images (before CLAHE)
-        # Each channel has its own list of operations
-        nuc_raw = apply_morphological_operations(nuc_raw, NUCLEUS_MORPH_OPERATIONS)
-        mem_raw = apply_morphological_operations(mem_raw, MEMBRANE_MORPH_OPERATIONS)
+        subfolder_name = os.path.basename(subfolder)
         
-        # Apply median filter (if enabled) - after morphology, before CLAHE
-        if APPLY_MEDIAN_FILTER:
-            nuc_raw = median_filter(nuc_raw, kernel_size=MEDIAN_FILTER_SIZE)
-            mem_raw = median_filter(mem_raw, kernel_size=MEDIAN_FILTER_SIZE)
-        
-        # Apply CLAHE normalization (if enabled)
-        if APPLY_CLAHE:
-            nuc = clahe_uint16(nuc_raw)
-            mem = clahe_uint16(mem_raw)
-            # Convert from uint16 to uint8 for gamma correction
-            nuc = (nuc.astype(np.float32) / 65535 * 255).astype(np.uint8)
-            mem = (mem.astype(np.float32) / 65535 * 255).astype(np.uint8)
-            # Apply gamma correction (if enabled)
-            if APPLY_GAMMA:
-                nuc = apply_gamma(nuc, gamma=GAMMA_VALUE)
-                mem = apply_gamma(mem, gamma=GAMMA_VALUE)
-        else:
-            # Skip CLAHE, just convert to uint8 with min-max scaling
-            nuc = nuc_raw.astype(np.uint8) if nuc_raw.dtype == np.uint8 else np.round(((nuc_raw.astype(np.float32) - np.min(nuc_raw)) / (np.max(nuc_raw) - np.min(nuc_raw) + 1e-8)) * 255).astype(np.uint8)
-            mem = mem_raw.astype(np.uint8) if mem_raw.dtype == np.uint8 else np.round(((mem_raw.astype(np.float32) - np.min(mem_raw)) / (np.max(mem_raw) - np.min(mem_raw) + 1e-8)) * 255).astype(np.uint8)
+        try:
+            # Read raw images
+            nuc_raw = tiff.imread(nuc_path)
+            mem_raw = tiff.imread(mem_path)
+            
+            # Apply morphological operations on raw images (before CLAHE)
+            # Each channel has its own list of operations
+            nuc_raw = apply_morphological_operations(nuc_raw, NUCLEUS_MORPH_OPERATIONS)
+            mem_raw = apply_morphological_operations(mem_raw, MEMBRANE_MORPH_OPERATIONS)
+            
+            # Apply median filter (if enabled) - after morphology, before CLAHE
+            if APPLY_MEDIAN_FILTER:
+                nuc_raw = median_filter(nuc_raw, kernel_size=MEDIAN_FILTER_SIZE)
+                mem_raw = median_filter(mem_raw, kernel_size=MEDIAN_FILTER_SIZE)
+            
+            # Apply CLAHE normalization (if enabled)
+            if APPLY_CLAHE:
+                nuc = clahe_uint16(nuc_raw)
+                mem = clahe_uint16(mem_raw)
+                # Convert from uint16 to uint8 for gamma correction
+                nuc = (nuc.astype(np.float32) / 65535 * 255).astype(np.uint8)
+                mem = (mem.astype(np.float32) / 65535 * 255).astype(np.uint8)
+                # Apply gamma correction (if enabled)
+                if APPLY_GAMMA:
+                    nuc = apply_gamma(nuc, gamma=GAMMA_VALUE)
+                    mem = apply_gamma(mem, gamma=GAMMA_VALUE)
+            else:
+                # Skip CLAHE, just convert to uint8 with min-max scaling
+                nuc = nuc_raw.astype(np.uint8) if nuc_raw.dtype == np.uint8 else np.round(((nuc_raw.astype(np.float32) - np.min(nuc_raw)) / (np.max(nuc_raw) - np.min(nuc_raw) + 1e-8)) * 255).astype(np.uint8)
+                mem = mem_raw.astype(np.uint8) if mem_raw.dtype == np.uint8 else np.round(((mem_raw.astype(np.float32) - np.min(mem_raw)) / (np.max(mem_raw) - np.min(mem_raw) + 1e-8)) * 255).astype(np.uint8)
 
-        # Stack channels in the specified order
-        if CHANNEL_ORDER == ['nucleus', 'membrane']:
-            out = np.stack([nuc, mem], axis=0).astype(np.uint8)  # (2, H, W) - Channel 0 = Nucleus, Channel 1 = Membrane
-        elif CHANNEL_ORDER == ['membrane', 'nucleus']:
-            out = np.stack([mem, nuc], axis=0).astype(np.uint8)  # (2, H, W) - Channel 0 = Membrane, Channel 1 = Nucleus
-        else:
-            raise ValueError(f"Invalid CHANNEL_ORDER: {CHANNEL_ORDER}. Must be ['nucleus', 'membrane'] or ['membrane', 'nucleus']")
-        
-        # Save to the output directory
-        out_path = os.path.join(OUTPUT_DIR, f"{base_name}.tiff")
-        
-        # Save with ImageJ format so Cellpose reads the channels correctly
-        tiff.imwrite(out_path, out, imagej=True)
+            # Stack channels in the specified order
+            if CHANNEL_ORDER == ['nucleus', 'membrane']:
+                out = np.stack([nuc, mem], axis=0).astype(np.uint8)  # (2, H, W) - Channel 0 = Nucleus, Channel 1 = Membrane
+            elif CHANNEL_ORDER == ['membrane', 'nucleus']:
+                out = np.stack([mem, nuc], axis=0).astype(np.uint8)  # (2, H, W) - Channel 0 = Membrane, Channel 1 = Nucleus
+            else:
+                raise ValueError(f"Invalid CHANNEL_ORDER: {CHANNEL_ORDER}. Must be ['nucleus', 'membrane'] or ['membrane', 'nucleus']")
+            
+            # Save to the SAME subfolder as the input files, with the same name as the folder
+            out_path = os.path.join(subfolder, f"{os.path.basename(subfolder)}.tiff")
+            
+            # Save with ImageJ format so Cellpose reads the channels correctly
+            tiff.imwrite(out_path, out, imagej=True)
 
-        print(f"DONE: {base_name}")
-        done += 1
-        
-    except Exception as e:
-        print(f"SKIP ({str(e)}): {base_name}")
+            print(f"  [DONE] {subfolder_name}")
+            done += 1
+            
+        except Exception as e:
+            print(f"  [FAIL] {subfolder_name} ({str(e)})")
+            skipped += 1
+            continue
+    else:
+        print(f"  [SKIP] {os.path.basename(subfolder)} (expected 1 nucleus + 1 membrane, found {len(subfolder_nuc)} nucleus + {len(subfolder_mem)} membrane)")
         skipped += 1
-        continue
 
 print(f"\nFinished. DONE={done}, SKIPPED={skipped}")

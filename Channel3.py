@@ -6,17 +6,14 @@ from pathlib import Path
 # Define directories
 # input_dir is the PARENT folder that contains one or more subfolders (named
 # after markers), and the .tiff files live inside those subfolders.
-input_dir = '/omics/odcf/analysis/OE0622_projects/mibi_shared/Haanh/subCOrg_pixel/mibi/data/Ilastik_Projects/Annotations'  # Change this to your parent input directory
+input_dir = '/omics/odcf/analysis/OE0622_projects/mibi_shared/Haanh/subCOrg_pixel/mibi/data/Results/latest_p2/Probabilities'  # Change this to your parent input directory
 # output_dir is where the *_Channel3 folders are written.
-output_dir = '/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/preprocessing/Segmentation/positivity_map_v3/Channel3'  # Change this to your desired output directory
+output_dir = '/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/preprocessing/Segmentation/positivity_map_v3/lineage_markers'  # Change this to your desired output directory
 
 os.makedirs(output_dir, exist_ok=True)
 
 # Marker names to exclude from processing.
-exclude_markers = {
-    'NaK_ATPase_HLA-I_old',
-    'Rab5a_PE_not_annotated',
-}
+exclude_markers = {}
 
 
 def should_process(subfolder):
@@ -52,13 +49,21 @@ for subfolder in os.listdir(input_dir):
                 print(f'Skipped {filename}: Expected 3D array (height, width, channels)')
                 continue
 
-            # Filename has FOV_MARKER structure, e.g. A_1a_C01_R01_Catalase.tiff
-            # FOV = everything before the last underscore, MARKER = the last segment.
+            # Filename has FOV_MARKER_prob structure, e.g.
+            # A_1a_C01_R01_Catalase_prob.tiff. Drop the trailing "_prob"
+            # (present on input, unwanted on output). The MARKER equals the
+            # subfolder name (which may itself contain underscores, e.g.
+            # NaK_ATPase_HLA-I), so strip that suffix to get the FOV instead of
+            # splitting on the last underscore.
             base_name = Path(filename).stem
-            if '_' not in base_name:
-                print(f'Skipped {filename}: cannot split into FOV_MARKER')
+            if base_name.endswith('_prob'):
+                base_name = base_name[:-len('_prob')]
+            marker = subfolder
+            suffix = f'_{marker}'
+            if not base_name.endswith(suffix):
+                print(f'Skipped {filename}: does not end with marker "_{marker}"')
                 continue
-            fov, marker = base_name.rsplit('_', 1)
+            fov = base_name[:-len(suffix)]
 
             # Output layout: <output_dir>/<FOV>/<MARKER>.tiff
             # Markers from every input subfolder are grouped by FOV, so all

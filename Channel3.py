@@ -1,3 +1,6 @@
+#This script extracts channel 3 from multi-channel TIFF files in subfolders of a parent input directory,
+#saves the extracted channel as new TIFF files in an organized output directory structure.
+
 import tifffile
 import numpy as np
 import os
@@ -6,9 +9,9 @@ from pathlib import Path
 # Define directories
 # input_dir is the PARENT folder that contains one or more subfolders (named
 # after markers), and the .tiff files live inside those subfolders.
-input_dir = '/omics/odcf/analysis/OE0622_projects/mibi_shared/Haanh/subCOrg_pixel/mibi/data/Results/latest_p2/Probabilities'  # Change this to your parent input directory
+input_dir = '/omics/odcf/analysis/OE0622_projects/mibi_shared/Haanh/subCOrg_pixel/mibi/data/Results/V4/V4_new/Probabilities'  # Change this to your parent input directory
 # output_dir is where the *_Channel3 folders are written.
-output_dir = '/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/preprocessing/Segmentation/positivity_map_v3/lineage_markers'  # Change this to your desired output directory
+output_dir = '/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/preprocessing/Segmentation/positivity_map_v3/subcellular_markers'  # Change this to your desired output directory
 
 os.makedirs(output_dir, exist_ok=True)
 

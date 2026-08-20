@@ -100,7 +100,8 @@ def canonicalize_label_and_stack(label: np.ndarray, stack: np.ndarray) -> Tuple[
         nuc_cx, nuc_cy = _centroid(label == 2)
         if nuc_cx - nuc_cy > 0:
             label = np.flipud(label)
-            stack = np.flipud(stack)
+            # stack is (C,H,W): mirror rows, not channels (np.flipud would flip axis 0)
+            stack = np.flip(stack, axis=1)
             label = transform.rotate(label, -90, resize=False, order=0, mode="constant", preserve_range=True)
             stack = _rotate_per_channel(stack, -90, order=1)
             meta["flip_diag"] = 1.0

@@ -38,6 +38,7 @@ class ExportStage2Config:
     flat_output: bool = False
     filename_template: str = "{fov}_{cell_mask_id}.pt"
     relative_paths: bool = False
+    mask_crops: bool = False
 
 
 def _load_table(path: str | Path | pd.DataFrame) -> pd.DataFrame:
@@ -240,6 +241,10 @@ def export_stage2_crops(df: pd.DataFrame, config: ExportStage2Config) -> pd.Data
         stack128 = downsample_stack(stack256, config.target_size)
         cellmask128 = downsample_mask(cellmask256, config.target_size) > 0.5
 
+        if config.mask_crops:
+            stack256 = stack256 * cellmask256[np.newaxis, :, :]
+            stack128 = stack128 * cellmask128[np.newaxis, :, :]
+
         resolved_cell_id = cell_id_value if cell_id_value is not None else f"{fov}__{cell_mask_id}"
         if config.flat_output:
             filename = _render_filename(config.filename_template, fov, cell_mask_id, resolved_cell_id)
@@ -328,6 +333,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Store relative filenames in manifest instead of absolute paths",
     )
+    parser.add_argument(
+        "--mask_crops",
+        action="store_true",
+        help="Zero out pixels outside the cell of interest in the exported stack crops",
+    )
     return parser.parse_args()
 
 
@@ -363,6 +373,7 @@ def main() -> None:
         flat_output=args.flat_output,
         filename_template=args.filename_template,
         relative_paths=relative_paths,
+        mask_crops=args.mask_crops,
     )
     manifest = export_stage2_crops(df, cfg)
     args.out_manifest.parent.mkdir(parents=True, exist_ok=True)

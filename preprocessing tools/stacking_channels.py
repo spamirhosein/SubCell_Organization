@@ -17,7 +17,7 @@ fov_folders = [
 # Note: Cellpose typically uses Channel 1 for Cytoplasm/Membrane and Channel 2 for Nucleus.
 channel_files = [
     "HH3.tiff", # Channel 1
-    "Lamin_A_C.tiff" , #NaK_ATPase_HLA-I.tiff   # Channel 2
+    "Lamin_A_C_H3K9me3.tiff" , #NaK_ATPase_HLA-I.tiff   # Channel 2
 ]
 
 # 3. Specify the output folder

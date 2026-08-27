@@ -6,8 +6,13 @@ from skimage.filters import threshold_otsu
 from skimage.transform import resize
 import matplotlib.pyplot as plt
 
-ROOT = Path(r"D:\image_data\Ha Anh\HLA-I_Channel3")
-OUT_DIR = Path(r"D:\image_data\Ha Anh\HLA-I_Channel3\quality_ranking+abundance")
+# ── Input ──────────────────────────────────────────────────────────────────────
+# ROOT is the parent folder; every subfolder in it is one FOV, and each FOV folder
+# holds one TIFF per channel named after the marker (e.g. "CD45.tiff").
+ROOT = Path('/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/preprocessing/Segmentation/positivity_map_v3/subcellular_markers')
+CHANNEL = "NaK_ATPase_HLA-I"   # marker to rank the FOVs on (file name without extension)
+OUT_DIR = Path('/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/preprocessing/quality_ranking/V3') / CHANNEL
+
 DEGENERATE_CUTOFF = 0.95  # flag if one class captures >95% of pixels
 THUMB_SIZE = 128
 MONTAGE_COLS = 12
@@ -64,6 +69,21 @@ def make_thumbnail(img: np.ndarray, size: int = THUMB_SIZE) -> np.ndarray:
     return resize(img, (size, size), anti_aliasing=True, preserve_range=True).astype(np.float32)
 
 
+def find_channel_tiff(fov_dir: Path, channel: str) -> Path | None:
+    """Return the TIFF of `channel` inside `fov_dir`, or None if it is missing."""
+    for ext in (".tiff", ".tif", ".TIFF", ".TIF"):
+        candidate = fov_dir / f"{channel}{ext}"
+        if candidate.exists():
+            return candidate
+    # case-insensitive fallback (e.g. "cd45.tiff" vs CHANNEL = "CD45")
+    wanted = channel.lower()
+    for candidate in sorted(fov_dir.iterdir()):
+        if (candidate.suffix.lower() in (".tiff", ".tif")
+                and candidate.stem.lower() == wanted):
+            return candidate
+    return None
+
+
 def score_color(score: float) -> str:
     if score < 0.25:
         return "red"
@@ -73,20 +93,20 @@ def score_color(score: float) -> str:
 
 
 # ── Process all FOVs ───────────────────────────────────────────────────────────
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+
 fov_dirs = sorted(d for d in ROOT.iterdir() if d.is_dir())
-print(f"Found {len(fov_dirs)} FOV folders.\n")
+print(f"Found {len(fov_dirs)} FOV folders in {ROOT}")
+print(f"Ranking on channel: {CHANNEL}\n")
 
 records = []
 thumbnails = []  # list of (fov_name, thumb_array, confusion_score)
 
 for fov_dir in fov_dirs:
-    tiff_path = fov_dir / f"{fov_dir.name}.tiff"
-    if not tiff_path.exists():
-        candidates = list(fov_dir.glob("*.tiff")) + list(fov_dir.glob("*.tif"))
-        if not candidates:
-            print(f"  SKIP  {fov_dir.name}  — no TIFF found")
-            continue
-        tiff_path = candidates[0]
+    tiff_path = find_channel_tiff(fov_dir, CHANNEL)
+    if tiff_path is None:
+        print(f"  SKIP  {fov_dir.name}  — no '{CHANNEL}' TIFF found")
+        continue
 
     try:
         img = load_and_normalize(tiff_path)
@@ -109,12 +129,16 @@ for fov_dir in fov_dirs:
         print(f"  ERROR  {fov_dir.name}  — {exc}")
 
 # ── Build ranked DataFrame ─────────────────────────────────────────────────────
+if not records:
+    raise SystemExit(f"No FOV in {ROOT} contained a '{CHANNEL}' TIFF — nothing to rank.")
+
 df = pd.DataFrame(records)
 df = df.sort_values("final_score", ascending=False).reset_index(drop=True)
 df.insert(0, "rank", df.index + 1)  # rank 1 = best (highest final score)
 df = df[["rank", "fov", "p_background", "p_membrane", "otsu_threshold",
          "clarity_score", "membrane_fraction", "final_score", "degenerate"]]
-csv_path = OUT_DIR / "fov_quality_ranking.csv"
+df.insert(2, "channel", CHANNEL)
+csv_path = OUT_DIR / f"fov_quality_ranking_{CHANNEL}.csv"
 df.to_csv(csv_path, index=False, float_format="%.6f")
 print(f"\nSaved ranking CSV  →  {csv_path}")
 
@@ -143,7 +167,7 @@ score_label = (
     else "Clarity Score  =  |P(membrane) − P(background)|"
 )
 ax.set_ylabel(score_label, fontsize=9)
-ax.set_title("FOV Quality Ranking — Membrane Channel Positivity Map Clarity", fontsize=12)
+ax.set_title(f"FOV Quality Ranking — {CHANNEL} Channel Clarity", fontsize=12)
 ax.set_ylim(0, 1.05)
 ax.set_yticks(np.arange(0, 1.1, 0.1))
 ax.legend(fontsize=9)
@@ -157,7 +181,7 @@ if USE_ABUNDANCE:
     ax_abund.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
 
 plt.tight_layout()
-bar_path = OUT_DIR / "fov_quality_scores_barplot.png"
+bar_path = OUT_DIR / f"fov_quality_scores_barplot_{CHANNEL}.png"
 fig.savefig(bar_path, dpi=150)
 plt.close(fig)
 print(f"Saved bar chart     →  {bar_path}")
@@ -189,12 +213,12 @@ for j in range(i + 1, len(axes_flat)):
 
 score_mode_str = "final score (clarity + abundance)" if USE_ABUNDANCE else "clarity score (contrast only)"
 fig2.suptitle(
-    f"FOV Montage — sorted worst → best ({score_mode_str})\n"
+    f"FOV Montage — {CHANNEL} — sorted worst → best ({score_mode_str})\n"
     "Red border < 0.25 | Orange border 0.25–0.50 | Green border ≥ 0.50",
     fontsize=10,
 )
 plt.tight_layout()
-montage_path = OUT_DIR / "fov_quality_montage.png"
+montage_path = OUT_DIR / f"fov_quality_montage_{CHANNEL}.png"
 fig2.savefig(montage_path, dpi=100)
 plt.close(fig2)
 print(f"Saved montage       →  {montage_path}")

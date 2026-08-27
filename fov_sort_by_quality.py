@@ -4,16 +4,23 @@ from pathlib import Path
 import pandas as pd
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-INPUT     = Path(r"D:\image_data\New_Data\Ha Anh\HH3_Channel3")    # FOV source folder
-TABLE_PATH = Path(r"D:\image_data\New_Data\Ha Anh\HLA-I_Channel3\quality_ranking+abundance\fov_quality_ranking.csv")    # CSV with FOV quality scores (must have 'fov' and 'final_score' columns)
-OUT_DIR  = Path(r"D:\image_data\New_Data\Ha Anh\HH3_Channel3\sorted_by_quality")   # Output folder for sorted FOVs
+INPUT     = Path("/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/preprocessing/Segmentation/positivity_map_v3/subcellular_markers")    # FOV source folder
+TABLE_PATH = Path("/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/preprocessing/quality_ranking/v3/NaK_ATPase_HLA-I/fov_quality_ranking_NaK_ATPase_HLA-I.csv")   # CSV with FOV quality scores (must have 'fov' and 'final_score' columns)
+OUT_DIR  = Path("/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/preprocessing/Segmentation/positivity_map_v3/sorted_by_quality")   # Output folder for sorted FOVs
 
 SCORE_COL = "final_score"   # column from CSV used for sorting
 
 # Thresholds — must match the ranking script's score_color logic
-HIGH_THRESH = 0.50   # final_score >= HIGH_THRESH  → High
+HIGH_THRESH = 0.45   # final_score >= HIGH_THRESH  → High
 LOW_THRESH  = 0.25   # final_score <  LOW_THRESH   → Low
                      # everything in between        → Moderate
+
+
+# ── Validate inputs ────────────────────────────────────────────────────────────
+if not INPUT.is_dir():
+    raise FileNotFoundError(f"INPUT folder not found: {INPUT}")
+if not TABLE_PATH.is_file():
+    raise FileNotFoundError(f"Ranking CSV not found: {TABLE_PATH}")
 
 
 # ── Setup output folders ───────────────────────────────────────────────────────
@@ -56,7 +63,7 @@ for _, row in df.iterrows():
 
     # Copy entire FOV folder
     dest = OUT_DIR / category / fov_name
-    shutil.copytree(fov_dir, dest)
+    shutil.copytree(fov_dir, dest, dirs_exist_ok=True)
     counts[category] += 1
     print(f"  [{category:<8}]  {fov_name:<25}  {SCORE_COL}={score:.4f}")
 

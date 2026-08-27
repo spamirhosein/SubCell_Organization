@@ -4,7 +4,7 @@ import tifffile
 import numpy as np
 
 # 1. Specify the parent folder path
-parent_folder = "/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/preprocessing/Segmentation/positivity_map_v3/subcellular_markers"
+parent_folder = "/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/preprocessing/Segmentation/positivity_map_v3/sorted_by_quality/High"
 
 # Find all subdirectories (each represents a different FOV)
 fov_folders = [
@@ -17,11 +17,11 @@ fov_folders = [
 # Note: Cellpose typically uses Channel 1 for Cytoplasm/Membrane and Channel 2 for Nucleus.
 channel_files = [
     "HH3.tiff", # Channel 1
-    "Lamin_A_C.tiff"   # Channel 2
+    "Lamin_A_C.tiff" , #NaK_ATPase_HLA-I.tiff   # Channel 2
 ]
 
 # 3. Specify the output folder
-output_folder = "/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/preprocessing/Segmentation/positivity_map_v3/HH3_Lamin"
+output_folder = "/omics/odcf/analysis/OE0622_projects/mibi_shared/Amir/preprocessing/Segmentation/positivity_map_v3/sorted_by_quality/High/nuclei"
 os.makedirs(output_folder, exist_ok=True)
 
 for fov_path in fov_folders:

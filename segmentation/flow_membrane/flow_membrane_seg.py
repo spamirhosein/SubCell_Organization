@@ -295,8 +295,8 @@ def process_one(seg_path: str, out_dir: str, p: Params, overlay: bool):
     rows = cell_table(labels, ctx, p)
 
     os.makedirs(out_dir, exist_ok=True)
-    np.save(os.path.join(out_dir, f"{name}.labels.npy"), labels.astype(np.uint16))
-    tiff.imwrite(os.path.join(out_dir, f"{name}.labels.tif"), labels.astype(np.uint16))  # ADDED: TIFF for your viewer
+    np.save(os.path.join(out_dir, f"{name}.whole_cell.npy"), labels.astype(np.uint16))
+    tiff.imwrite(os.path.join(out_dir, f"{name}.whole_cell.tif"), labels.astype(np.uint16))  # ADDED: TIFF for your viewer
     save_table(rows, os.path.join(out_dir, f"{name}.cells.csv"))
     if overlay:
         make_overlay(seg, labels, ctx, os.path.join(out_dir, f"{name}.overlay.png"))
